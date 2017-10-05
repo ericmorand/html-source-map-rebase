@@ -1,0 +1,11 @@
+<article>
+    <img src="../assets/foo.png">
+</article>
+
+<ul>
+{% for i in 1..2 %}
+    <li>
+        <img src="./assets/foo-{{ i }}.png">
+    </li>
+{% endfor %}
+</ul>
