@@ -33,7 +33,7 @@ class Rebaser extends Transform {
         return true;
       };
 
-      const document = parse5.parseFragment(chunk.toString(), {
+      const document = parse5.parse(chunk.toString(), {
         locationInfo: true
       });
 
@@ -49,7 +49,7 @@ class Rebaser extends Transform {
         let rec = function (node) {
           // console.log('NODE', node.nodeName, node.__location);
 
-          if (node.nodeName !== '#document-fragment') {
+          if (node.__location) {
             let location = node.__location;
 
             let nodeStartLine = location.line;
