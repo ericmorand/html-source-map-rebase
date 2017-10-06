@@ -106,10 +106,10 @@ tap.test('rebaser', function (test) {
         }))
         .on('finish', function () {
           test.same(rebased.sort(), [
-            'assets/foo.png',
-            'assets/foo.png',
-            'partials/assets/foo-1.png',
-            'partials/assets/foo-2.png'
+            'test/fixtures/assets/foo.png',
+            'test/fixtures/assets/foo.png',
+            'test/fixtures/partials/assets/foo-1.png',
+            'test/fixtures/partials/assets/foo-2.png'
           ].sort());
 
           test.end();
