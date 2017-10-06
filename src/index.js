@@ -87,9 +87,7 @@ class Rebaser extends Transform {
                     let attributeValue = unquote(attribute.value);
 
                     if (shouldBeRebased(attributeValue)) {
-                      let rel = path.dirname(path.relative(sourceMapConsumer.sourceRoot, nodeRegion.source));
-
-                      attribute.value = path.join(rel, attributeValue);
+                      attribute.value = path.relative('.', path.join(path.dirname(nodeRegion.source), attributeValue));
 
                       self.emit('rebase', attribute.value);
                     }
