@@ -3,7 +3,7 @@ const unquote = require('unquote');
 const parse5 = require('parse5');
 const Transform = require('stream').Transform;
 const Url = require('url');
-const SourceMapConsumer = require('source-map').SourceMapConsumer;
+const {SourceMapConsumer} = require('source-map');
 
 class Rebaser extends Transform {
   constructor(options) {
@@ -37,18 +37,21 @@ class Rebaser extends Transform {
         locationInfo: true
       });
 
+      let done = () => {
+        self.push(parse5.serialize(document));
+
+        callback();
+      };
+
       if (self.map) {
         let sourceMapConsumer = new SourceMapConsumer(self.map);
-
         let regions = [];
 
         sourceMapConsumer.eachMapping(function (mapping) {
           regions.push(mapping);
-        }, null, SourceMapConsumer.ORIGINAL_ORDER);
+        }, null);
 
-        let rec = function (node) {
-          // console.log('NODE', node.nodeName, node.__location);
-
+        let processNode = function (node) {
           if (node.__location) {
             let location = node.__location;
 
@@ -73,11 +76,6 @@ class Rebaser extends Transform {
               i++;
             }
 
-            // console.log('>>> node', {
-            //   line: nodeStartLine,
-            //   column: nodeStartColumn
-            // }, 'probably lies in region', nodeRegion);
-
             let attributes = node.attrs;
 
             if (attributes) {
@@ -100,17 +98,18 @@ class Rebaser extends Transform {
 
           if (node.childNodes) {
             node.childNodes.forEach(function (childNode) {
-              rec(childNode);
+              processNode(childNode);
             })
           }
         };
 
-        rec(document);
+        processNode(document);
+
+        done();
       }
-
-      self.push(parse5.serialize(document));
-
-      callback();
+      else {
+        done();
+      }
     }
     catch (err) {
       callback(err);
