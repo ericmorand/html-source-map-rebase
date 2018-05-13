@@ -21,12 +21,12 @@
   "homepage": "https://github.com/ericmorand/html-source-map-rebase#readme",
   "dependencies": {
     "parse5": "^3.0.2",
-    "source-map": "^0.5.6",
+    "source-map": "^0.6.1",
     "unquote": "^1.1.0"
   },
   "devDependencies": {
     "tap": "^10.3.0",
     "through2": "^2.0.3",
-    "twing": "^0.1.1"
+    "twing": "^1.2.0-rc3"
   }
 }
