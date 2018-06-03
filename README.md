@@ -1,6 +1,6 @@
 # html-source-map-rebase
 
-[![NPM version][npm-image]][npm-url] [![Build Status][travis-image]][travis-url] [![Dependency Status][daviddm-image]][daviddm-url] [![Coverage percentage][coveralls-image]][coveralls-url]
+[![NPM version][npm-image]][npm-url] [![Build Status][travis-image]][travis-url] [![Coverage percentage][coveralls-image]][coveralls-url]
 
 Rebase your HTML assets relatively to the source file they were imported from.
 
@@ -31,44 +31,43 @@ By rebasing the assets relatively to the file they were imported from, the resul
 
 ## How it works
 
-html-source-map-rebase uses the mapping provided by source maps to resolve the original file the assets where imported from. That's why it *needs* a source map to perform its magic. Any tool able to generate a source map from a Twig source file is appropriate. Here is how one could use [twing](https://www.npmjs.com/package/twing) and html-source-map-rebase together to render a stylesheet and rebase its assets.
+html-source-map-rebase uses the mapping provided by source maps to resolve the original file the assets where imported from. That's why it *needs* a source map to perform its magic. Any tool able to generate a source map from a source file is appropriate. Here is how one could use [twing](https://www.npmjs.com/package/twing) and html-source-map-rebase together to render an HTML document and rebase its assets.
 
 ``` javascript
-let twing = require('twing');
-let Rebaser = require('html-source-map-rebase');
+const {TwingEnvironment, TwingLoaderFilesystem} = require('twing');
+const Readable = require('stream').Readable;
+const through = require('through2');
+const Rebaser = require('.');
 
-twing.twig({
-    path: 'index.twig',
-    sourceMap: true,
-    load: function (template) {
-        let result = template.render();
-          
-        let html = result.markup.toString();
-        let map = result.sourceMap;
-                  
-        let rebaser = new Rebaser({
-            map: map
-        });
-          
-        let data = '';
-        let stream = new Readable();
-          
-        stream
-            .pipe(rebaser)
-            .pipe(through(function (chunk, enc, cb) {
-                data += chunk;
-          
-                cb();
-            }))
-            .on('finish', function () {
-                console.log(data); // data contains the rendered HTML with rebased assets
-            })
-          ;
-          
-        stream.push(html);
-        stream.push(null);
-    }
-})
+let loader = new TwingLoaderFilesystem('src');
+let twing = new TwingEnvironment(loader, {
+  source_map: true
+});
+
+let html = twing.render('index.twig');
+let map = twing.getSourceMap();
+
+let rebaser = new Rebaser({
+  map: map.toString()
+});
+
+let data = '';
+let stream = new Readable();
+
+stream
+  .pipe(rebaser)
+  .pipe(through(function (chunk, enc, cb) {
+    data += chunk;
+
+    cb();
+  }))
+  .on('finish', function () {
+    console.log(data); // data contains the rendered HTML with rebased assets
+  })
+;
+
+stream.push(html);
+stream.push(null);
 ```
 
 ## API
@@ -114,7 +113,5 @@ Apache-2.0 © [Eric MORAND]()
 [npm-url]: https://npmjs.org/package/html-source-map-rebase
 [travis-image]: https://travis-ci.org/ericmorand/html-source-map-rebase.svg?branch=master
 [travis-url]: https://travis-ci.org/ericmorand/html-source-map-rebase
-[daviddm-image]: https://david-dm.org/ericmorand/html-source-map-rebase.svg?theme=shields.io
-[daviddm-url]: https://david-dm.org/ericmorand/html-source-map-rebase
 [coveralls-image]: https://coveralls.io/repos/github/ericmorand/html-source-map-rebase/badge.svg
 [coveralls-url]: https://coveralls.io/github/ericmorand/html-source-map-rebase
