@@ -6,184 +6,196 @@ const through = require('through2');
 const Twing = require('twing');
 const Readable = require('stream').Readable;
 
-let render = function (entry, data, done) {
-  return Twing.twig({
-    path: entry,
-    sourceMap: true,
-    load: function (template) {
-      done(template.render(data));
-    }
+let warmUp = function (templates) {
+  let loader = new Twing.TwingLoaderFilesystem(path.resolve('test/fixtures'));
+  let twing = new Twing.TwingEnvironment(loader, {
+    source_map: true
   });
+
+  return twing;
 };
 
 tap.test('rebaser', function (test) {
-  test.plan(5);
-
   test.test('should handle well-formed map', function (test) {
-    render(path.resolve('test/fixtures/index.twig'), {}, function (twingRenderResult) {
-      let rebaser = new Rebaser({
-        map: twingRenderResult.sourceMap
-      });
+    let twing = warmUp();
 
-      let data = null;
-      let stream = new Readable();
+    let html = twing.render('index.twig');
+    let map = twing.getSourceMap();
 
-      stream
-        .pipe(rebaser)
-        .pipe(through(function (chunk, enc, cb) {
-          data = chunk;
+    let rebaser = new Rebaser({
+      map: map.toString()
+    });
 
-          cb();
-        }))
-        .on('finish', function () {
-          fs.readFile(path.resolve('test/fixtures/wanted.html'), function (err, readData) {
-            test.equal(data.toString(), readData.toString());
+    let data = null;
+    let stream = new Readable();
 
-            test.end();
-          });
-        })
-        .on('error', function (err) {
-          test.fail(err);
+    stream
+      .pipe(rebaser)
+      .pipe(through(function (chunk, enc, cb) {
+        data = chunk;
+
+        cb();
+      }))
+      .on('finish', function () {
+        fs.readFile(path.resolve('test/fixtures/wanted.html'), function (err, readData) {
+          test.equal(data.toString(), readData.toString());
 
           test.end();
         });
-
-      stream.push(twingRenderResult.markup);
-      stream.push(null);
-    });
-  });
-
-  test.test('should emit "error" event on badly formed map', function (test) {
-    render(path.resolve('test/fixtures/index.twig'), {}, function (twingRenderResult) {
-      let rebaser = new Rebaser({
-        map: 'foo'
-      });
-
-      let data = null;
-      let stream = new Readable();
-
-      rebaser.on('error', function (err) {
-        test.ok(err);
+      })
+      .on('error', function (err) {
+        test.fail(err);
 
         test.end();
       });
 
-      stream
-        .pipe(rebaser)
-        .pipe(through(function (chunk, enc, cb) {
-          data = chunk;
-
-          cb();
-        }))
-        .on('finish', function () {
-          test.fail();
-
-          test.end();
-        });
-
-      stream.push(twingRenderResult.markup);
-      stream.push(null);
-    });
+    stream.push(html);
+    stream.push(null);
   });
 
-  test.test('should emit "rebase" event', function (test) {
-    render(path.resolve('test/fixtures/index.twig'), {}, function (twingRenderResult) {
-      let rebaser = new Rebaser({
-        map: twingRenderResult.sourceMap.toString()
-      });
+  test.test('should emit "error" event on badly formed map', function (test) {
+    let twing = warmUp();
 
-      let rebased = [];
-      let stream = new Readable();
+    let html = twing.render('index.twig');
 
-      rebaser.on('rebase', function (file) {
-        rebased.push(file);
-      });
-
-      stream
-        .pipe(rebaser)
-        .pipe(through(function (chunk, enc, cb) {
-          cb();
-        }))
-        .on('finish', function () {
-          test.same(rebased.sort(), [
-            'test/fixtures/assets/foo.png',
-            'test/fixtures/assets/foo.png',
-            'test/fixtures/partials/assets/foo-1.png',
-            'test/fixtures/partials/assets/foo-2.png'
-          ].sort());
-
-          test.end();
-        });
-
-      stream.push(twingRenderResult.markup);
-      stream.push(null);
+    let rebaser = new Rebaser({
+      map: 'foo'
     });
+
+    let data = null;
+    let stream = new Readable();
+
+    rebaser.on('error', function (err) {
+      test.ok(err);
+
+      test.end();
+    });
+
+    stream
+      .pipe(rebaser)
+      .pipe(through(function (chunk, enc, cb) {
+        data = chunk;
+
+        cb();
+      }))
+      .on('finish', function () {
+        test.fail();
+
+        test.end();
+      });
+
+    stream.push(html);
+    stream.push(null);
+  });
+  //
+  test.test('should emit "rebase" event', function (test) {
+    let twing = warmUp();
+
+    let html = twing.render('index.twig');
+    let map = twing.getSourceMap();
+
+    let rebaser = new Rebaser({
+      map: map.toString()
+    });
+
+    let rebased = [];
+    let stream = new Readable();
+
+    rebaser.on('rebase', function (file) {
+      rebased.push(file);
+    });
+
+    stream
+      .pipe(rebaser)
+      .pipe(through(function (chunk, enc, cb) {
+        cb();
+      }))
+      .on('finish', function () {
+        test.same(rebased.sort(), [
+          'assets/foo.png',
+          'assets/foo.png',
+          'partials/assets/foo-1.png',
+          'partials/assets/foo-2.png'
+        ].sort());
+
+        test.end();
+      });
+
+    stream.push(html);
+    stream.push(null);
   });
 
   test.test('should handle remote and absolute paths', function (test) {
-    render(path.resolve('test/fixtures/remote-and-absolute/index.twig'), {}, function (twingRenderResult) {
-      let rebaser = new Rebaser({
-        map: twingRenderResult.sourceMap.toString()
-      });
+    let twing = warmUp();
 
-      let data = null;
+    let html = twing.render('remote-and-absolute/index.twig');
+    let map = twing.getSourceMap();
 
-      let stream = new Readable();
+    let rebaser = new Rebaser({
+      map: map.toString()
+    });
 
-      stream
-        .pipe(rebaser)
-        .pipe(through(function (chunk, enc, cb) {
-          data = chunk;
+    let data = null;
 
-          cb();
-        }))
-        .on('finish', function () {
-          fs.readFile(path.resolve('test/fixtures/remote-and-absolute/wanted.html'), function (err, readData) {
-            test.equal(data.toString(), readData.toString());
+    let stream = new Readable();
 
-            test.end();
-          });
-        })
-        .on('error', function (err) {
-          test.fail(err);
+    stream
+      .pipe(rebaser)
+      .pipe(through(function (chunk, enc, cb) {
+        data = chunk;
+
+        cb();
+      }))
+      .on('finish', function () {
+        fs.readFile(path.resolve('test/fixtures/remote-and-absolute/wanted.html'), function (err, readData) {
+          test.equal(data.toString(), readData.toString());
 
           test.end();
         });
+      })
+      .on('error', function (err) {
+        test.fail(err);
 
-      stream.push(twingRenderResult.markup);
-      stream.push(null);
-    });
+        test.end();
+      });
+
+    stream.push(html);
+    stream.push(null);
   });
 
   test.test('should support no map option', function (test) {
-    render(path.resolve('test/fixtures/no-map/index.twig'), {}, function (twingRenderResult) {
-      let rebaser = new Rebaser();
+    let twing = warmUp();
 
-      let data = null;
-      let stream = new Readable();
+    let html = twing.render('no-map/index.twig');
 
-      stream
-        .pipe(rebaser)
-        .pipe(through(function (chunk, enc, cb) {
-          data = chunk;
+    let rebaser = new Rebaser();
 
-          cb();
-        }))
-        .on('finish', function () {
-          fs.readFile(path.resolve('test/fixtures/no-map/wanted.html'), function (err, readData) {
-            test.equal(data.toString(), readData.toString());
+    let data = null;
+    let stream = new Readable();
 
-            test.end();
-          });
-        })
-        .on('error', function (err) {
-          test.fail(err);
+    stream
+      .pipe(rebaser)
+      .pipe(through(function (chunk, enc, cb) {
+        data = chunk;
+
+        cb();
+      }))
+      .on('finish', function () {
+        fs.readFile(path.resolve('test/fixtures/no-map/wanted.html'), function (err, readData) {
+          test.equal(data.toString(), readData.toString());
 
           test.end();
         });
+      })
+      .on('error', function (err) {
+        test.fail(err);
 
-      stream.push(twingRenderResult.markup);
-      stream.push(null);
-    });
+        test.end();
+      });
+
+    stream.push(html);
+    stream.push(null);
   });
+
+  test.end();
 });
