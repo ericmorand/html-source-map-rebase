@@ -52,7 +52,9 @@ let rebaser = new Rebaser({
 });
 
 let data = '';
-let stream = new Readable();
+let stream = new Readable({
+    encoding: 'utf8'
+});
 
 stream
   .pipe(rebaser)
