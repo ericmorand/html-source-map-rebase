@@ -1,119 +1,134 @@
 const path = require('path');
 const unquote = require('unquote');
-const parse5 = require('parse5');
-const Transform = require('stream').Transform;
+const slash = require('slash');
 const Url = require('url');
 const {SourceMapConsumer} = require('source-map');
+const RewritingStream = require('parse5-html-rewriting-stream');
 
-class Rebaser extends Transform {
+class Rebaser extends RewritingStream {
   constructor(options) {
     options = options || {};
 
     super(options);
 
+    this._regions = null;
+
     this.map = options.map;
+
+    if (this.map) {
+      this.on('startTag', (tag) => {
+        this._transformStartTag(tag);
+        this.emitStartTag(tag);
+      })
+    }
   }
 
-  _transform(chunk, encoding, callback) {
-    try {
-      let self = this;
+  _getRegions() {
+    if (!this._regions) {
+      let sourceMapConsumer = new SourceMapConsumer(this.map);
 
-      let shouldBeRebased = function (uri) {
-        if (path.isAbsolute(uri)) {
-          return false;
+      let regions = [];
+      let region = null;
+      let currentSource = null;
+
+      sourceMapConsumer.eachMapping((mapping) => {
+        let source = mapping.source;
+
+        if (source !== currentSource) {
+          // end the current region...
+          if (region) {
+            region.endLine = mapping.generatedLine;
+            region.endColumn = mapping.generatedColumn;
+          }
+
+          //...and start a new one
+          region = {
+            source: source,
+            startLine: mapping.generatedLine,
+            startColumn: mapping.generatedColumn,
+            endLine: null,
+            endColumn: null
+          };
+
+          regions.push(region);
+
+          currentSource = source;
         }
+      }, null);
 
-        let url = Url.parse(uri);
+      this._regions = regions;
+    }
 
-        // if the url host is set, it is a remote uri
-        if (url.host) {
-          return false;
-        }
+    return this._regions;
+  }
 
-        return true;
-      };
+  /**
+   * @param tag {SAXParser.StartTagToken}
+   * @private
+   */
+  _transformStartTag(tag) {
+    let shouldBeRebased = function (uri) {
+      if (path.isAbsolute(uri)) {
+        return false;
+      }
 
-      const document = parse5.parse(chunk.toString(), {
-        locationInfo: true
-      });
+      let url = Url.parse(uri);
 
-      let done = () => {
-        self.push(parse5.serialize(document));
+      // if the url host is set, it is a remote uri
+      if (url.host) {
+        return false;
+      }
 
-        callback();
-      };
+      return true;
+    };
 
-      if (self.map) {
-        let sourceMapConsumer = new SourceMapConsumer(self.map);
-        let regions = [];
+    /**
+     * @param tag {SAXParser.StartTagToken}
+     */
+    let processTag = (tag) => {
+      let attributes = tag.attrs;
 
-        sourceMapConsumer.eachMapping(function (mapping) {
-          regions.push(mapping);
-        }, null);
+      attributes.forEach((attribute) => {
+        switch (attribute.name) {
+          case 'href':
+          case 'src':
+            let attributeValue = unquote(attribute.value);
 
-        let processNode = function (node) {
-          if (node.__location) {
-            let location = node.__location;
+            if (shouldBeRebased(attributeValue)) {
+              let location = tag.sourceCodeLocation;
+              let tagStartLine = location.startLine;
+              let tagStartColumn = location.startCol - 1;
 
-            let nodeStartLine = location.line;
-            let nodeStartColumn = location.col - 1;
+              let i = 0;
+              let tagRegion = null;
+              let regions = this._getRegions();
 
-            let i = 0;
-            let nodeRegion = null;
-            let done = false;
+              while ((i < regions.length) && (tagRegion === null)) {
+                let region = regions[i];
 
-            while ((i < regions.length) && (done === false)) {
-              let region = regions[i];
-
-              if ((region.generatedLine <= nodeStartLine) && (region.generatedColumn <= nodeStartColumn)) {
-                nodeRegion = region;
-              }
-
-              if ((region.generatedLine >= nodeStartLine) && (region.generatedColumn > nodeStartColumn)) {
-                done = true;
-              }
-
-              i++;
-            }
-
-            let attributes = node.attrs;
-
-            if (attributes) {
-              attributes.forEach(function (attribute) {
-                switch (attribute.name) {
-                  case 'src':
-                    let attributeValue = unquote(attribute.value);
-
-                    if (shouldBeRebased(attributeValue)) {
-                      attribute.value = path.relative('.', path.join(path.dirname(nodeRegion.source), attributeValue));
-
-                      self.emit('rebase', attribute.value);
-                    }
-
-                    break;
+                if (
+                  ((region.startLine < tagStartLine) || ((region.startLine === tagStartLine) && (region.startColumn >= tagStartColumn))) &&
+                  ((region.endLine === null) || (region.endLine > tagStartLine) || ((region.endLine === tagStartLine) && (region.endColumn >= tagStartColumn)))
+                ) {
+                  tagRegion = region;
                 }
-              });
+
+                i++;
+              }
+
+              let rebasedPath = path.join(path.dirname(tagRegion.source), attributeValue);
+
+              attribute.value = slash(path.join('.', rebasedPath));
+
+              this.emit('rebase', slash(rebasedPath));
             }
-          }
 
-          if (node.childNodes) {
-            node.childNodes.forEach(function (childNode) {
-              processNode(childNode);
-            })
-          }
-        };
+            break;
+        }
+      });
+    };
 
-        processNode(document);
-
-        done();
-      }
-      else {
-        done();
-      }
-    }
-    catch (err) {
-      callback(err);
-    }
+    processTag(tag);
   }
 }
 

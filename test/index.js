@@ -20,19 +20,22 @@ tap.test('rebaser', function (test) {
     let twing = warmUp();
 
     let html = twing.render('index.twig');
+
     let map = twing.getSourceMap();
 
     let rebaser = new Rebaser({
       map: map.toString()
     });
 
-    let data = null;
-    let stream = new Readable();
+    let data = '';
+    let stream = new Readable({
+      encoding: 'utf8'
+    });
 
     stream
       .pipe(rebaser)
       .pipe(through(function (chunk, enc, cb) {
-        data = chunk;
+        data += chunk;
 
         cb();
       }))
@@ -53,41 +56,6 @@ tap.test('rebaser', function (test) {
     stream.push(null);
   });
 
-  test.test('should emit "error" event on badly formed map', function (test) {
-    let twing = warmUp();
-
-    let html = twing.render('index.twig');
-
-    let rebaser = new Rebaser({
-      map: 'foo'
-    });
-
-    let data = null;
-    let stream = new Readable();
-
-    rebaser.on('error', function (err) {
-      test.ok(err);
-
-      test.end();
-    });
-
-    stream
-      .pipe(rebaser)
-      .pipe(through(function (chunk, enc, cb) {
-        data = chunk;
-
-        cb();
-      }))
-      .on('finish', function () {
-        test.fail();
-
-        test.end();
-      });
-
-    stream.push(html);
-    stream.push(null);
-  });
-  //
   test.test('should emit "rebase" event', function (test) {
     let twing = warmUp();
 
@@ -99,7 +67,9 @@ tap.test('rebaser', function (test) {
     });
 
     let rebased = [];
-    let stream = new Readable();
+    let stream = new Readable({
+      encoding: 'utf8'
+    });
 
     rebaser.on('rebase', function (file) {
       rebased.push(file);
@@ -112,6 +82,7 @@ tap.test('rebaser', function (test) {
       }))
       .on('finish', function () {
         test.same(rebased.sort(), [
+          'assets/foo.png',
           'assets/foo.png',
           'assets/foo.png',
           'partials/assets/foo-1.png',
@@ -135,14 +106,16 @@ tap.test('rebaser', function (test) {
       map: map.toString()
     });
 
-    let data = null;
+    let data = '';
 
-    let stream = new Readable();
+    let stream = new Readable({
+      encoding: 'utf8'
+    });
 
     stream
       .pipe(rebaser)
       .pipe(through(function (chunk, enc, cb) {
-        data = chunk;
+        data += chunk;
 
         cb();
       }))
@@ -170,18 +143,61 @@ tap.test('rebaser', function (test) {
 
     let rebaser = new Rebaser();
 
-    let data = null;
-    let stream = new Readable();
+    let data = '';
+    let stream = new Readable({
+      encoding: 'utf8'
+    });
 
     stream
       .pipe(rebaser)
       .pipe(through(function (chunk, enc, cb) {
-        data = chunk;
+        data += chunk;
 
         cb();
       }))
       .on('finish', function () {
         fs.readFile(path.resolve('test/fixtures/no-map/wanted.html'), function (err, readData) {
+          test.equal(data.toString(), readData.toString());
+
+          test.end();
+        });
+      })
+      .on('error', function (err) {
+        test.fail(err);
+
+        test.end();
+      });
+
+    stream.push(html);
+    stream.push(null);
+  });
+
+  test.test('should handle region boundaries', function (test) {
+    let twing = warmUp();
+
+    let html = twing.render('boundaries/index.twig', {
+      foo: 'foo'
+    });
+    let map = twing.getSourceMap();
+
+    let rebaser = new Rebaser({
+      map: map.toString()
+    });
+
+    let data = '';
+    let stream = new Readable({
+      encoding: 'utf8'
+    });
+
+    stream
+      .pipe(rebaser)
+      .pipe(through(function (chunk, enc, cb) {
+        data += chunk;
+
+        cb();
+      }))
+      .on('finish', function () {
+        fs.readFile(path.resolve('test/fixtures/boundaries/wanted.html'), function (err, readData) {
           test.equal(data.toString(), readData.toString());
 
           test.end();
