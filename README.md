@@ -31,13 +31,13 @@ By rebasing the assets relatively to the file they were imported from, the resul
 
 ## How it works
 
-html-source-map-rebase uses the mapping provided by source maps to resolve the original file the assets where imported from. That's why it *needs* a source map to perform its magic. Any tool able to generate a source map from a source file is appropriate. Here is how one could use [twing](https://www.npmjs.com/package/twing) and html-source-map-rebase together to render an HTML document and rebase its assets.
+html-source-map-rebase uses the mapping provided by source maps to resolve the original file the assets where imported from. That's why it *needs* a source map to perform its magic. Any tool able to generate a source map from a source file is appropriate. Here is how one could use [Twing](https://www.npmjs.com/package/twing) and html-source-map-rebase together to render an HTML document and rebase its assets.
 
 ``` javascript
 const {TwingEnvironment, TwingLoaderFilesystem} = require('twing');
 const Readable = require('stream').Readable;
 const through = require('through2');
-const Rebaser = require('.');
+const Rebaser = require('html-source-map-rebase');
 
 let loader = new TwingLoaderFilesystem('src');
 let twing = new TwingEnvironment(loader, {
@@ -45,10 +45,9 @@ let twing = new TwingEnvironment(loader, {
 });
 
 let html = twing.render('index.twig');
-let map = twing.getSourceMap();
 
 let rebaser = new Rebaser({
-  map: map.toString()
+  map: twing.getSourceMap()
 });
 
 let data = '';
@@ -84,15 +83,32 @@ Optionally pass in some opts:
 
 * opts.map:
   
-  The belonging source map in the form of a JSON string. Defaults to `null`. Note that this module basically does nothing without a source map.
+    The belonging source map in the form of a JSON string. Defaults to `null`. Note that this module basically does nothing without a source map.
+
+* opts.rebase:
+    
+    Handles when the rebaser encounters an asset that may need rebasing.
+  
+    * Type: `Function`
+    * Default: `undefined`
+    * Signature:
+        * `url (Url)` - the [Url](https://nodejs.org/api/url.html) of the asset that may need rebasing.
+        * `source (String)` - the path of the file the asset was imported from.
+        * `done (Function)` - a callback function to invoke on completion. Accepts either `false`, `null`, `undefined` or an [Url](https://nodejs.org/api/url.html) as parameter. When called with `false`, the asset will not be rebased. When called with either `null` or `undefined`, the asset will be rebased using the [default rebasing logic](#rebasing-logic). When called with an Url, the asset will be rebased to that Url.
+
+## <a name="rebasing-logic"></a>Rebasing logic
+
+When html-source-map-rebase encounters an asset that may need rebasing, it first checks if it is a remote or a local asset. In the former case, the asset is not rebased at all. In the latter case, the asset is rebased be appending the asset path to the path of the source it's coming from.
+
+For example, a `foo/bar.png` asset coming from `/lorem/ipsum/index.twig` would be rebased to `/lorem/ipsum/foo/bar.png`.
 
 ## Events
 
 In addition to the usual events emitted by node.js streams, html-source-map-rebase emits the following events:
 
-### rebaser.on('rebase', function(file) {})
+### rebaser.on('rebase', function(url) {})
 
-Every time an asset is rebased, this event fires with the rebased path.
+Every time an asset is rebased, this event fires with the rebased [Url](https://nodejs.org/api/url.html).
 
 ## Installation
 
