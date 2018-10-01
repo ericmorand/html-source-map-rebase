@@ -213,6 +213,47 @@ tap.test('rebaser', function (test) {
     stream.push(null);
   });
 
+  test.test('should handle one liners', function (test) {
+    let twing = warmUp();
+
+    let html = twing.render('one-liner/index.twig', {
+      foo: 'foo'
+    });
+    let map = twing.getSourceMap();
+
+    let rebaser = new Rebaser({
+      map: map
+    });
+
+    let data = '';
+    let stream = new Readable({
+      encoding: 'utf8'
+    });
+
+    stream
+      .pipe(rebaser)
+      .pipe(through(function (chunk, enc, cb) {
+        data += chunk;
+
+        cb();
+      }))
+      .on('finish', function () {
+        fs.readFile(path.resolve('test/fixtures/one-liner/wanted.html'), function (err, readData) {
+          test.equal(data.toString(), readData.toString());
+
+          test.end();
+        });
+      })
+      .on('error', function (err) {
+        test.fail(err);
+
+        test.end();
+      });
+
+    stream.push(html);
+    stream.push(null);
+  });
+
   test.test('should support rebase callback', function (test) {
     let twing = warmUp();
 

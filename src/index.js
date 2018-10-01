@@ -92,7 +92,7 @@ class Rebaser extends RewritingStream {
               let region = regions[i];
 
               if (
-                ((region.startLine < tagStartLine) || ((region.startLine === tagStartLine) && (region.startColumn >= tagStartColumn))) &&
+                ((region.startLine < tagStartLine) || ((region.startLine === tagStartLine) && (region.startColumn <= tagStartColumn))) &&
                 ((region.endLine === null) || (region.endLine > tagStartLine) || ((region.endLine === tagStartLine) && (region.endColumn >= tagStartColumn)))
               ) {
                 tagRegion = region;
