@@ -14,6 +14,7 @@ class Rebaser extends RewritingStream {
     this._regions = null;
 
     this.map = options.map;
+    this.rebase = options.rebase;
 
     if (this.map) {
       this.on('startTag', (tag) => {
@@ -67,21 +68,6 @@ class Rebaser extends RewritingStream {
    * @private
    */
   _transformStartTag(tag) {
-    let shouldBeRebased = function (uri) {
-      if (path.isAbsolute(uri)) {
-        return false;
-      }
-
-      let url = Url.parse(uri);
-
-      // if the url host is set, it is a remote uri
-      if (url.host) {
-        return false;
-      }
-
-      return true;
-    };
-
     /**
      * @param tag {SAXParser.StartTagToken}
      */
@@ -92,36 +78,63 @@ class Rebaser extends RewritingStream {
         switch (attribute.name) {
           case 'href':
           case 'src':
-            let attributeValue = unquote(attribute.value);
+            let url = Url.parse(unquote(attribute.value));
 
-            if (shouldBeRebased(attributeValue)) {
-              let location = tag.sourceCodeLocation;
-              let tagStartLine = location.startLine;
-              let tagStartColumn = location.startCol - 1;
+            let location = tag.sourceCodeLocation;
+            let tagStartLine = location.startLine;
+            let tagStartColumn = location.startCol - 1;
 
-              let i = 0;
-              let tagRegion = null;
-              let regions = this._getRegions();
+            let i = 0;
+            let tagRegion = null;
+            let regions = this._getRegions();
 
-              while ((i < regions.length) && (tagRegion === null)) {
-                let region = regions[i];
+            while ((i < regions.length) && (tagRegion === null)) {
+              let region = regions[i];
 
-                if (
-                  ((region.startLine < tagStartLine) || ((region.startLine === tagStartLine) && (region.startColumn >= tagStartColumn))) &&
-                  ((region.endLine === null) || (region.endLine > tagStartLine) || ((region.endLine === tagStartLine) && (region.endColumn >= tagStartColumn)))
-                ) {
-                  tagRegion = region;
-                }
-
-                i++;
+              if (
+                ((region.startLine < tagStartLine) || ((region.startLine === tagStartLine) && (region.startColumn >= tagStartColumn))) &&
+                ((region.endLine === null) || (region.endLine > tagStartLine) || ((region.endLine === tagStartLine) && (region.endColumn >= tagStartColumn)))
+              ) {
+                tagRegion = region;
               }
 
-              let rebasedPath = path.join(path.dirname(tagRegion.source), attributeValue);
-
-              attribute.value = slash(path.join('.', rebasedPath));
-
-              this.emit('rebase', slash(rebasedPath));
+              i++;
             }
+
+            let rebase = this.rebase;
+
+            let done = (rebasedUrl) => {
+              if (rebasedUrl !== false) {
+                let attributeValue;
+
+                if (!rebasedUrl) { // default rebasing
+                  if (url.host) {
+                    attributeValue = url.href;
+                  }
+                  else {
+                    attributeValue = path.join(path.dirname(tagRegion.source), url.href);
+                  }
+
+                  rebasedUrl = Url.parse(attributeValue);
+                }
+
+                if (!rebasedUrl.host) {
+                  attributeValue = slash(path.join('.', rebasedUrl.href));
+                }
+
+                attribute.value = attributeValue;
+
+                this.emit('rebase', rebasedUrl);
+              }
+            };
+
+            if (!rebase) {
+              rebase = (url, source, done) => {
+                done();
+              };
+            }
+
+            rebase(url, tagRegion.source, done);
 
             break;
         }
